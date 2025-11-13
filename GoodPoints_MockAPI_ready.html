@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Good Points</title>
+<style>
+:root{--green:#2e8b57;--bg:#e9f7ef;--text:#213;}
+body{font-family:Inter, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;background:var(--bg);color:var(--text);margin:0;padding:16px}
+.container{max-width:980px;margin:0 auto}
+.card{background:#fff;padding:14px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,0.06)}
+h1{color:var(--green);text-align:center;margin:6px 0 14px}
+input,textarea,select,button{font-size:15px}
+input,textarea,select{width:100%;padding:8px;border-radius:8px;border:1px solid #d7e1da;margin-top:6px}
+button{background:var(--green);color:white;border:0;padding:10px 12px;border-radius:8px;cursor:pointer}
+button.secondary{background:#6c7e6c}
+.small{font-size:13px;color:#666}
+.row{display:flex;gap:8px;align-items:center}
+.productGrid{display:flex;flex-wrap:wrap;gap:12px}
+.productCard{width:170px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 1px 4px rgba(0,0,0,0.06);text-align:center}
+.productCard img{width:100%;height:110px;object-fit:cover;border-radius:8px}
+.muted{color:#666}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🌿 Good Points</h1>
+
+  <div id="loginCard" class="card">
+    <h3>เข้าสู่ระบบ</h3>
+    <input id="nameInput" placeholder="ชื่อของคุณ หรือพิมพ์ admin เพื่อเข้าระบบผู้ดูแล" />
+    <input id="adminPass" placeholder="รหัสผ่าน (สำหรับแอดมิน)" type="password" style="display:none" />
+    <div style="margin-top:8px" class="row">
+      <button id="loginBtn">เข้าสู่ระบบ</button>
+      <button id="demoProducts" class="secondary">เพิ่มตัวอย่างสินค้า</button>
+    </div>
+    <p class="small muted">แอดมิน: ชื่อ <b>admin</b> รหัส <b>admin123</b></p>
+  </div>
+
+  <div id="userApp" style="display:none">
+    <div class="card row" style="justify-content:space-between;align-items:center">
+      <div>
+        <p>👋 สวัสดี <b id="userName">-</b></p>
+        <p>คะแนนของคุณ: <b id="userPoints">0</b></p>
+      </div>
+      <div>
+        <button id="logoutUser" class="secondary">ออก</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <button id="doGoodBtn">ทำความดี +1 คะแนน (cooldown 20 วินาที)</button>
+      <p id="cooldownMsg" class="small muted"></p>
+    </div>
+
+    <div class="card">
+      <h3>🎁 สินค้า</h3>
+      <div id="products" class="productGrid"></div>
+    </div>
+
+    <div class="card">
+      <h3>📜 ประวัติการแลก</h3>
+      <ul id="redeemHistory"></ul>
+    </div>
+  </div>
+
+  <div id="adminApp" style="display:none">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3>🛠 แผงผู้ดูแล (Admin)</h3>
+        <div>
+          <button id="logoutAdmin" class="secondary">ออก</button>
+        </div>
+      </div>
+      <p class="small muted">เพิ่ม/ลบสินค้า, ให้คะแนนผู้ใช้, ดูประวัติ</p>
+    </div>
+
+    <div class="card">
+      <h4>เพิ่มสินค้า</h4>
+      <input id="prodName" placeholder="ชื่อสินค้า" />
+      <input id="prodCost" placeholder="คะแนนที่ใช้ (ตัวเลข)" type="number" />
+      <input id="prodImageUrl" placeholder="ใส่ลิงก์รูป (ถ้ามี) หรือปล่อยว่างเพื่ออัปโหลด" />
+      <input id="prodImageFile" type="file" accept="image/*" />
+      <div style="margin-top:8px" class="row">
+        <button id="addProductBtn">เพิ่มสินค้า</button>
+        <button id="clearProductsBtn" class="secondary">ล้างสินค้า (ท้องถิ่น)</button>
+      </div>
+      <p class="small muted">รองรับทั้ง URL และอัปโหลดไฟล์ (จะบันทึกเป็น data URL)</p>
+    </div>
+
+    <div class="card">
+      <h4>📦 สินค้า</h4>
+      <div id="adminProducts" class="productGrid"></div>
+    </div>
+
+    <div class="card">
+      <h4>👥 ผู้ใช้ทั้งหมด</h4>
+      <div id="userList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API_BASE = "https://6915a1fc84e8bd126afabc04.mockapi.io/goodpoints";
+const ADMIN_PASS = "admin123";
+const COOLDOWN_SECONDS = 20;
+
+const $ = id => document.getElementById(id);
+async function apiGet(path){ const r = await fetch(API_BASE + "/" + path); if(!r.ok) throw new Error('apiGet failed'); return r.json(); }
+async function apiPost(path, data){ const r = await fetch(API_BASE + "/" + path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)}); if(!r.ok) throw new Error('apiPost failed'); return r.json(); }
+async function apiPut(path, data){ const r = await fetch(API_BASE + "/" + path, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)}); if(!r.ok) throw new Error('apiPut failed'); return r.json(); }
+async function apiDelete(path){ const r = await fetch(API_BASE + "/" + path, {method:"DELETE"}); if(!r.ok) throw new Error('apiDelete failed'); return true; }
+
+let currentUser = null;
+
+$('loginBtn').addEventListener('click', onLogin);
+$('demoProducts').addEventListener('click', addSampleProducts);
+$('logoutUser').addEventListener('click', ()=> location.reload());
+$('logoutAdmin').addEventListener('click', ()=> location.reload());
+$('addProductBtn').addEventListener('click', onAddProduct);
+$('clearProductsBtn').addEventListener('click', ()=> { if(confirm('ล้างสินค้า (เฉพาะใน local) ใช่หรือไม่?')) localStorage.removeItem('gp_products'); loadAndRenderProducts(); });
+
+async function loadAndRenderProducts(){
+  try{
+    const prods = await apiGet("products");
+    renderProducts(prods);
+    renderAdminProducts(prods);
+  }catch(e){
+    const local = JSON.parse(localStorage.getItem('gp_products')||'[]');
+    renderProducts(local);
+    renderAdminProducts(local);
+  }
+}
+
+function renderProducts(prods){
+  const box = $('products'); box.innerHTML = '';
+  if(!prods || prods.length===0){ box.innerHTML = '<div class="small muted">ยังไม่มีสินค้า</div>'; return; }
+  prods.forEach(p=>{
+    const d = document.createElement('div'); d.className='productCard';
+    d.innerHTML = `<img src="${p.image||defaultImg()}" alt=""><div style="padding:6px"><b>${escapeHtml(p.name)}</b><br><small>${p.cost} คะแนน</small><br><button onclick="onRedeem('${p.id}')">แลก</button></div>`;
+    box.appendChild(d);
+  });
+}
+
+function renderAdminProducts(prods){
+  const box = $('adminProducts'); box.innerHTML = '';
+  if(!prods || prods.length===0){ box.innerHTML = '<div class="small muted">ยังไม่มีสินค้า</div>'; return; }
+  prods.forEach(p=>{
+    const d = document.createElement('div'); d.className='productCard';
+    d.innerHTML = `<img src="${p.image||defaultImg()}" alt=""><div style="padding:6px"><b>${escapeHtml(p.name)}</b><br><small>${p.cost} คะแนน</small><br><button onclick="onDeleteProduct('${p.id}')">ลบ</button></div>`;
+    box.appendChild(d);
+  });
+}
+
+function defaultImg(){ return "https://picsum.photos/seed/gp/400/300"; }
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+async function onLogin(){
+  const name = $('nameInput').value.trim();
+  const pass = $('adminPass').value;
+  if(!name) return alert('กรุณากรอกชื่อ');
+  if(name.toLowerCase()==='admin'){
+    if(pass !== ADMIN_PASS){ $('adminPass').style.display=''; return alert('รหัสแอดมินไม่ถูกต้อง'); }
+    showAdmin();
+    return;
+  }
+  try{
+    const users = await apiGet("users");
+    let user = users.find(u=>u.name === name);
+    if(!user){
+      user = await apiPost("users", { name, points: 0, history: [], lastGoodAt: null });
+    }
+    currentUser = user;
+    showUser();
+  }catch(e){
+    console.warn('API users fetch failed, fallback to local');
+    const localUsers = JSON.parse(localStorage.getItem('gp_users')||'{}');
+    if(!localUsers[name]){ localUsers[name] = { id: name, name, points:0, history:[], lastGoodAt:null }; localStorage.setItem('gp_users', JSON.stringify(localUsers)); }
+    currentUser = localUsers[name];
+    showUser();
+  }
+}
+
+function showUser(){ $('loginCard').style.display='none'; $('userApp').style.display=''; $('userName').textContent = currentUser.name; updateUserUI(); loadAndRenderProducts(); }
+function showAdmin(){ $('loginCard').style.display='none'; $('adminApp').style.display=''; loadAndRenderProducts(); renderUserList(); }
+
+async function updateUserUI(){
+  try{ const fresh = await apiGet("users/"+currentUser.id); currentUser = fresh; }catch(e){}
+  $('userPoints').textContent = currentUser.points || 0;
+  const list = $('redeemHistory'); list.innerHTML = '';
+  (currentUser.history||[]).slice().reverse().forEach(h=>{ const li=document.createElement('li'); li.textContent = `${h.item} — ${h.date}`; list.appendChild(li); });
+  updateCooldownMsg();
+}
+
+$('doGoodBtn').addEventListener('click', async ()=>{
+  try{
+    const now = Date.now();
+    const last = currentUser.lastGoodAt ? new Date(currentUser.lastGoodAt).getTime() : 0;
+    if(now - last < COOLDOWN_SECONDS*1000){ const remain = Math.ceil((COOLDOWN_SECONDS*1000 - (now-last))/1000); return alert('กรุณารออีก '+remain+' วินาที'); }
+    currentUser.points = (currentUser.points||0) + 1;
+    currentUser.lastGoodAt = new Date().toISOString();
+    await apiPut("users/"+currentUser.id, currentUser);
+    await updateUserUI(); alert('เพิ่ม 1 คะแนน ขอบคุณที่ทำความดี 😊');
+  }catch(e){
+    currentUser.points = (currentUser.points||0) + 1;
+    currentUser.lastGoodAt = new Date().toISOString();
+    const lu = JSON.parse(localStorage.getItem('gp_users')||'{}'); lu[currentUser.name] = currentUser; localStorage.setItem('gp_users', JSON.stringify(lu));
+    updateUserUI(); alert('เพิ่ม 1 คะแนน (ออฟไลน์)');
+  }
+});
+
+function updateCooldownMsg(){ const last = currentUser && currentUser.lastGoodAt ? new Date(currentUser.lastGoodAt).getTime() : 0; const remain = Math.max(0, COOLDOWN_SECONDS - Math.floor((Date.now()-last)/1000)); $('cooldownMsg').textContent = remain>0 ? 'รออีก '+remain+' วินาที' : 'พร้อมทำความดีได้เลย'; if(remain>0) setTimeout(updateCooldownMsg,1000); }
+
+async function onRedeem(productId){
+  try{
+    const p = await apiGet("products/"+productId);
+    if((currentUser.points||0) < p.cost) return alert('คะแนนไม่พอ');
+    currentUser.points -= p.cost;
+    currentUser.history = currentUser.history || [];
+    currentUser.history.push({ item: p.name, date: new Date().toLocaleString() });
+    await apiPut("users/"+currentUser.id, currentUser);
+    await updateUserUI();
+    alert('แลก '+p.name+' สำเร็จ 🎉');
+  }catch(e){ alert('ไม่สามารถแลกได้ (เชื่อมต่อเซิร์ฟเวอร์ล้มเหลว)'); console.error(e); }
+}
+
+async function onAddProduct(){
+  const name = $('prodName').value.trim();
+  const cost = parseInt($('prodCost').value);
+  const url = $('prodImageUrl').value.trim();
+  const file = $('prodImageFile').files[0];
+  if(!name || !cost) return alert('กรอกชื่อสินค้าและคะแนนให้ถูกต้อง');
+  try{
+    if(file){ const dataUrl = await readFileAsDataURL(file); await apiPost("products", { name, cost, image: dataUrl }); }
+    else{ const imageToUse = url || defaultImg(); await apiPost("products", { name, cost, image: imageToUse }); }
+    alert('เพิ่มสินค้าเรียบร้อย'); $('prodName').value=''; $('prodCost').value=''; $('prodImageUrl').value=''; $('prodImageFile').value=''; loadAndRenderProducts();
+  }catch(e){
+    const local = JSON.parse(localStorage.getItem('gp_products')||'[]'); const id = 'local_'+Date.now(); local.push({ id, name, cost, image: url || (file? await readFileAsDataURL(file) : defaultImg()) }); localStorage.setItem('gp_products', JSON.stringify(local)); alert('เพิ่มสินค้าในเครื่องเรียบร้อย (ออฟไลน์)'); loadAndRenderProducts();
+  }
+}
+function readFileAsDataURL(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(file); }); }
+async function onDeleteProduct(id){ if(!confirm('ลบสินค้านี้?')) return; try{ await apiDelete("products/"+id); alert('ลบสำเร็จ'); loadAndRenderProducts(); }catch(e){ const local = JSON.parse(localStorage.getItem('gp_products')||'[]'); const remaining = local.filter(x=>x.id!==id); localStorage.setItem('gp_products', JSON.stringify(remaining)); alert('ลบจากเครื่องเรียบร้อย'); loadAndRenderProducts(); } }
+
+async function renderUserList(){ try{ const users = await apiGet("users"); const box = $('userList'); box.innerHTML = ''; users.forEach(u=>{ if(u.name==='admin') return; const div = document.createElement('div'); div.className='card'; div.style.marginBottom='8px'; div.innerHTML = `<b>${escapeHtml(u.name)}</b> — ${u.points||0} คะแนน<br><div style="margin-top:8px;display:flex;gap:8px;align-items:center"><input type="number" placeholder="จำนวน" id="give_${u.id}" style="width:100px;padding:6px;border-radius:6px;border:1px solid #ddd" /><button onclick="adminGivePoints('${u.id}')">เพิ่มคะแนน</button><button onclick="adminViewHistory('${u.id}')" style="background:#6c7e6c">ประวัติ</button><button onclick="adminDeleteUser('${u.id}')" style="background:#c94a4a">ลบ</button></div>`; box.appendChild(div); }); }catch(e){ $('userList').innerHTML = '<div class="small muted">ไม่สามารถโหลดผู้ใช้ (ออฟไลน์)</div>'; } }
+
+window.adminGivePoints = async function(id){ const input = document.getElementById('give_'+id); const n = parseInt(input.value); if(!n || n===0) return alert('ใส่จำนวนที่ต้องการเพิ่ม'); try{ const u = await apiGet("users/"+id); u.points = (u.points||0) + n; await apiPut("users/"+id, u); alert('เพิ่มคะแนนเรียบร้อย'); renderUserList(); }catch(e){ alert('ไม่สามารถเพิ่มคะแนน (เชื่อมต่อเซิร์ฟเวอร์ล้มเหลว)'); console.error(e); } }
+
+window.adminViewHistory = async function(id){ try{ const u = await apiGet("users/"+id); const items = u.history || []; if(items.length===0) return alert('ยังไม่มีประวัติการแลก'); let txt = 'ประวัติการแลก:\n'; items.slice().reverse().forEach(it=> txt += `- ${it.item} (${it.date})\n`); alert(txt); }catch(e){ alert('ไม่สามารถดึงข้อมูล'); } }
+
+window.adminDeleteUser = async function(id){ if(!confirm('ลบผู้ใช้นี้?')) return; try{ await apiDelete("users/"+id); alert('ลบผู้ใช้เรียบร้อย'); renderUserList(); }catch(e){ alert('ลบไม่สำเร็จ'); } }
+
+function addSampleProducts(){ const sample = [ { name: "สมุดโน้ต", cost: 10, image: "https://picsum.photos/seed/note/400/300" }, { name: "ปากกา", cost: 5, image: "https://picsum.photos/seed/pen/400/300" }, { name: "สติกเกอร์", cost: 3, image: "https://picsum.photos/seed/sticker/400/300" } ]; Promise.all(sample.map(s=> apiPost("products", s).catch(()=>null))).then(()=> loadAndRenderProducts()); }
+
+$('nameInput').addEventListener('input', e=>{ if(e.target.value.trim().toLowerCase()==='admin') $('adminPass').style.display=''; else $('adminPass').style.display='none'; });
+
+loadAndRenderProducts();
+</script>
+</body>
+</html>
